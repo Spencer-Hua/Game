@@ -1,8 +1,12 @@
 import pygame
 import sys
+import os  # 新增导入os模块用于处理文件路径
 
 # 初始化 Pygame
 pygame.init()
+
+# 获取当前脚本所在目录作为资源路径
+resource_path = os.path.dirname(os.path.abspath(__file__))  # 添加这行获取当前脚本目录
 
 # 游戏常量
 SCREEN_WIDTH = 1200  # 原来是 800
@@ -22,6 +26,8 @@ YELLOW = (255, 255, 50)
 PURPLE = (180, 70, 240)
 LIGHT_BLUE = (100, 200, 255)
 DARK_RED = (150, 0, 0)
+GRAY = (169, 169, 169)
+DARK_GRAY = (100, 100, 100)
 
 # 创建游戏窗口
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -29,19 +35,33 @@ pygame.display.set_caption("简易 I Wanna 游戏")
 clock = pygame.time.Clock()
 
 # 加载背景图片（请确保图片路径正确）
-background_image = pygame.image.load(".\\images\\background.jpg").convert()
+background_image = pygame.image.load(os.path.join(resource_path, "images", "background.jpg")).convert()  # 修改为使用resource_path
 
 # 加载玩家图片
-player_image = pygame.image.load(".\images\kid.png").convert_alpha()
+player_image = pygame.image.load(os.path.join(resource_path, "images", "kid.png")).convert_alpha()  # 修改为使用resource_path
 player_image = pygame.transform.scale(player_image, (60, 60))  # 调整图片大小为原来的1.5倍
 
 # 新增加载第二个玩家图片
-player_image_2 = pygame.image.load(".\images\kid1.png").convert_alpha()
+player_image_2 = pygame.image.load(os.path.join(resource_path, "images", "kid1.png")).convert_alpha()  # 修改为使用resource_path
 player_image_2 = pygame.transform.scale(player_image_2, (60, 60))  # 调整图片大小为原来的1.5倍
 
 # 加载金币图片（请确保图片路径正确）
-coin_image = pygame.image.load(".\\images\\coin.gif").convert_alpha()
+coin_image = pygame.image.load(os.path.join(resource_path, "images", "coin.gif")).convert_alpha()  # 修改为使用resource_path
 coin_image = pygame.transform.scale(coin_image, (30, 30))  # 调整大小为30x30像素
+
+# 加载中文字体，路径就在这个py的同一个文件夹里面
+try:
+    # 尝试加载simhei字体
+    font_path = os.path.join(resource_path, "simhei.ttf")  # 字体文件放在同级目录下
+    title_font = pygame.font.Font(font_path, 48)
+    ui_font = pygame.font.Font(font_path, 36)
+    small_font = pygame.font.Font(font_path, 24)
+except Exception as e:
+    print(f"无法加载字体文件: {e}")
+    # 如果加载失败，使用默认字体
+    title_font = pygame.font.SysFont(None, 48)
+    ui_font = pygame.font.SysFont(None, 36)
+    small_font = pygame.font.SysFont(None, 24)
 
 # 玩家类
 class Player:
@@ -53,27 +73,50 @@ class Player:
         self.vel_x = 0
         self.vel_y = 0
         self.jumping = False
-        self.double_jump_available = True  # 新增二段跳状态
+        self.double_jump_available = True
         self.alive = True
         self.checkpoint = (x, y)
         self.death_count = 0
-        self.direction = 1  # 1 for right, -1 for left
-        self.animation_frame = 0  # 新增动画帧计数器
-        self.animation_images = [player_image, player_image_2]  # 新增动画图片列表
-        self.image = self.animation_images[0]  # 初始图片
-
-    def jump(self):
+        self.direction = 1
+        self.animation_frame = 0
+        self.animation_images = [player_image, player_image_2]
+        self.image = self.animation_images[0]
+        self.bullets = []
+        self.last_shot_time = 0
+        self.shoot_cooldown = 300
+        self.is_on_ground = False  # 新增地面状态标志
+        self.request_jump = False  # 新增跳跃请求标志
+        
+    def handle_jump(self):
+        """处理跳跃逻辑，返回是否执行了跳跃"""
         if not self.jumping:
             self.vel_y = JUMP_STRENGTH
             self.jumping = True
-        elif self.double_jump_available:  # 如果已经在空中且二段跳可用
-            self.vel_y = JUMP_STRENGTH * 0.7  # 第二次跳跃更高一些
-            self.double_jump_available = False  # 用过之后设为不可用
-
-    def move(self, platforms):
-        # 水平移动
+            return True
+        elif self.double_jump_available:
+            self.vel_y = JUMP_STRENGTH * 0.7
+            self.double_jump_available = False
+            return True
+        return False
+    
+    # 新增方法：处理玩家控制输入
+    def update_controls(self):
+        """处理键盘输入控制"""
+        keys = pygame.key.get_pressed()
+        self.vel_x = 0
+        if keys[pygame.K_LEFT]:
+            self.vel_x = -PLAYER_SPEED
+            self.direction = -1
+        if keys[pygame.K_RIGHT]:
+            self.vel_x = PLAYER_SPEED
+            self.direction = 1
+            
+    # 新增方法：更新玩家位置
+    def update_position(self, platforms):
+        """更新玩家位置并处理碰撞"""
+        # 应用水平移动
         self.x += self.vel_x
-
+        
         # 水平碰撞检测
         for platform in platforms:
             if self.check_collision(platform):
@@ -81,11 +124,11 @@ class Player:
                     self.x = platform.x - self.width
                 elif self.vel_x < 0:  # 向左移动
                     self.x = platform.x + platform.width
-
+        
         # 应用重力
         self.vel_y += GRAVITY
         self.y += self.vel_y
-
+        
         # 垂直碰撞检测
         on_ground = False
         for platform in platforms:
@@ -110,7 +153,8 @@ class Player:
             self.die()
 
         self.update_animation()  # 在移动后更新动画
-
+        self.is_on_ground = on_ground  # 更新地面状态标志
+        
         return on_ground
 
     def check_collision(self, obj):
@@ -148,6 +192,28 @@ class Player:
             self.animation_frame = (self.animation_frame + 1) % 10  # 每10帧循环一次
             if self.vel_x != 0:  # 只有在移动时才切换动画
                 self.image = self.animation_images[self.animation_frame // 5]  # 每5帧切换一次图片
+
+    def shoot(self):
+        """射击方法，创建新子弹"""
+        current_time = pygame.time.get_ticks()
+        # 检查是否满足射击冷却条件
+        if current_time - self.last_shot_time > self.shoot_cooldown:
+            # 创建新子弹，从玩家中心位置发射
+            bullet = Bullet(self.x + self.width//2, self.y + self.height//2, self.direction)
+            self.bullets.append(bullet)
+            self.last_shot_time = current_time  # 更新最后射击时间
+
+    def update_bullets(self):
+        """更新所有子弹的状态"""
+        for bullet in self.bullets[:]:  # 使用切片复制列表以避免在迭代时修改列表
+            bullet.update()
+            if not bullet.active:
+                self.bullets.remove(bullet)
+
+    def draw_bullets(self, screen):
+        """绘制所有子弹"""
+        for bullet in self.bullets:
+            bullet.draw(screen)
 
 # 平台类
 class Platform:
@@ -199,8 +265,8 @@ class StaticSpike:
                       (self.x + self.width, self.y + self.height//2),
                       (self.x, self.y + self.height)]
         
-        pygame.draw.polygon(screen, RED, points)
-        pygame.draw.polygon(screen, DARK_RED, points, 2)
+        pygame.draw.polygon(screen, GRAY, points)
+        pygame.draw.polygon(screen, (0,0,0) ,points, 2)
 
     def reset(self):
         # 静态尖刺不需要重置逻辑
@@ -287,6 +353,38 @@ class Coin:
         if not self.collected:
             screen.blit(coin_image, (self.x, self.y))
 
+# 在Coin类之后添加子弹类
+class Bullet:
+    def __init__(self, x, y, direction):
+        self.x = x
+        self.y = y
+        self.width = 5  # 很小的碰撞体积
+        self.height = 5
+        self.speed = 10
+        self.direction = direction  # 1为向右，-1为向左
+        self.active = True
+        self.range = 600  # 新增射程限制，单位为像素
+        self.distance_traveled = 0  # 已飞行的距离
+
+    def update(self):
+        # 子弹向前飞行
+        self.x += self.speed * self.direction
+        self.distance_traveled += abs(self.speed * self.direction)  # 更新已飞行距离
+        
+        # 如果子弹移出屏幕或达到射程，标记为非活动
+        if self.x < -self.width or self.x > SCREEN_WIDTH + self.width or self.distance_traveled >= self.range:
+            self.active = False
+
+    def check_collision(self, player):
+        return (player.x < self.x + self.width and
+                player.x + player.width > self.x and
+                player.y < self.y + self.height and
+                player.y + player.height > self.y)
+
+    def draw(self, screen):
+        # 绘制子弹为红色矩形
+        pygame.draw.rect(screen, RED, (self.x, self.y, self.width, self.height))
+        
 # 创建游戏对象
 def create_level():
     platforms = [
@@ -350,10 +448,15 @@ def create_level():
 
     goal = Platform(1125, 150, 45, 45, YELLOW)  # goal 的尺寸也按比例放大
 
-    return platforms, spikes, static_spikes, checkpoints, goal, coins
+    # 添加一个测试用的子弹
+    bullets = [
+        Bullet(300, 300, 1)  # 在位置(300,300)创建一个向右飞行的子弹
+    ]
+
+    return platforms, spikes, static_spikes, checkpoints, goal, coins, bullets
 
 # 创建游戏对象
-platforms, spikes, static_spikes, checkpoints, goal, coins = create_level()
+platforms, spikes, static_spikes, checkpoints, goal, coins, bullets = create_level()
 player = Player(50, 500)
 game_state = "playing"  # "playing", "win"
 font = pygame.font.SysFont(None, 36)
@@ -383,6 +486,103 @@ class Particle:
 
 particles = []
 
+# 新增关卡选择界面函数
+def show_level_selection():
+    selecting = True
+    # 新增：创建地面和玩家对象
+    ground = Platform(0, 825, 1200, 75)
+    level_selection_player = Player(50, 500)
+    
+    while selecting:
+        # 使用背景图片而不是纯色填充
+        scaled_background = pygame.transform.scale(background_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
+        screen.blit(scaled_background, (0, 0))
+        
+        title_text = pygame.font.SysFont("SimHei", 48).render("选择关卡", True, WHITE)
+        screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, 100))
+
+        level1_text = pygame.font.SysFont("SimHei", 36).render("关卡1", True, LIGHT_BLUE)
+        level1_rect = level1_text.get_rect()
+        level1_rect.topleft = (SCREEN_WIDTH//2 - level1_rect.width//2, 200)
+        screen.blit(level1_text, level1_rect)
+
+        level2_text = pygame.font.SysFont("SimHei", 36).render("关卡2（开发中）", True, GRAY)
+        level2_rect = level2_text.get_rect()
+        level2_rect.topleft = (SCREEN_WIDTH//2 - level2_rect.width//2, 250)
+        screen.blit(level2_text, level2_rect)
+        
+        # 新增：处理玩家移动控制
+        keys = pygame.key.get_pressed()
+        level_selection_player.vel_x = 0
+        if keys[pygame.K_LEFT]:
+            level_selection_player.vel_x = -PLAYER_SPEED
+            level_selection_player.direction = -1
+        elif keys[pygame.K_RIGHT]:
+            level_selection_player.vel_x = PLAYER_SPEED
+            level_selection_player.direction = 1
+            
+        # 新增：更新玩家位置并处理地面碰撞
+        level_selection_player.x += level_selection_player.vel_x
+        level_selection_player.y += level_selection_player.vel_y
+        
+        # 应用重力
+        level_selection_player.vel_y += GRAVITY
+        
+        # 地面碰撞检测
+        on_ground = False
+        if level_selection_player.check_collision(ground):
+            if level_selection_player.vel_y > 0:  # 下落
+                level_selection_player.y = ground.y - level_selection_player.height
+                level_selection_player.vel_y = 0
+                on_ground = True
+                # 重置跳跃状态
+                level_selection_player.jumping = False
+                level_selection_player.double_jump_available = True
+        
+        # 边界检查
+        if level_selection_player.x < 0:
+            level_selection_player.x = 0
+        if level_selection_player.x > SCREEN_WIDTH - level_selection_player.width:
+            level_selection_player.x = SCREEN_WIDTH - level_selection_player.width
+
+        # 新增：更新子弹
+        level_selection_player.update_bullets()  # 更新子弹位置，移除无效子弹
+            
+        # 新增：绘制地面和玩家
+        ground.draw(screen)
+        level_selection_player.draw(screen)
+
+        # 新增：绘制子弹
+        level_selection_player.draw_bullets(screen)  # 绘制所有子弹
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return None
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP:
+                    level_selection_player.handle_jump()  # 使用统一方法处理跳跃
+                # 新增：按空格键发射子弹
+                if event.key == pygame.K_SPACE:
+                    level_selection_player.shoot()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    mouse_pos = pygame.mouse.get_pos()
+                    if level1_rect.collidepoint(mouse_pos):
+                        selecting = False
+                        return "level1"
+                    elif level2_rect.collidepoint(mouse_pos):
+                        # 这里可以添加关卡2的支持
+                        pass
+
+        pygame.display.flip()
+        clock.tick(FPS)
+
+# 游戏主循环前展示关卡选择界面
+selected_level = show_level_selection()
+if selected_level is None:
+    pygame.quit()
+    sys.exit()
+
 # 游戏主循环
 running = True
 while running:
@@ -392,7 +592,10 @@ while running:
             running = False
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_UP and player.alive:
-                player.jump()
+                player.handle_jump()  # 使用统一方法处理跳跃
+            elif event.key == pygame.K_SPACE and player.alive:
+                # 向当前方向发射一颗子弹
+                bullets.append(Bullet(player.x + player.width//2, player.y + player.height//2, player.direction))
             elif event.key == pygame.K_r:
                 # 重置游戏
                 platforms, spikes, checkpoints, goal = create_level()
@@ -411,22 +614,13 @@ while running:
                     if os.path.exists(log_path):
                         os.startfile(log_path)  # Windows系统使用startfile
 
-    # 玩家控制
+    # 玩家控制 - 现在完全封装在Player类中
     if player.alive and game_state == "playing":
-        keys = pygame.key.get_pressed()
-        player.vel_x = 0
-        if keys[pygame.K_LEFT]:
-            player.vel_x = -PLAYER_SPEED
-            player.direction = -1
-        if keys[pygame.K_RIGHT]:
-            player.vel_x = PLAYER_SPEED
-            player.direction = 1
+        player.update_controls()  # 处理键盘输入
+        player.update_position(platforms)  # 更新位置和碰撞检测
 
     # 更新游戏状态
     if player.alive and game_state == "playing":
-        # 移动玩家
-        on_ground = player.move(platforms)
-
         # 检查尖刺碰撞及触发
         for spike in spikes:
             spike.trigger_spike(player)
@@ -438,7 +632,6 @@ while running:
                     particles.append(Particle(player.x + player.width//2,
                                             player.y + player.height//2,
                                             BLUE))
-
             # 添加对update方法的调用
             spike.update()
         for static_spike in static_spikes:
@@ -464,6 +657,12 @@ while running:
         # 检查目标碰撞
         if player.check_collision(goal):
             game_state = "win"
+
+        # 新增：更新子弹
+        for bullet in bullets[:]:
+            bullet.update()
+            if not bullet.active:
+                bullets.remove(bullet)
 
     # 玩家死亡处理
     if not player.alive:
@@ -521,6 +720,10 @@ while running:
     for coin in coins:
         coin.draw(screen)
 
+    # 新增：绘制子弹
+    for bullet in bullets:
+        bullet.draw(screen)
+
     # 绘制玩家
     if player.alive:
         player.draw(screen)
@@ -530,16 +733,16 @@ while running:
         particle.draw(screen)
 
     # 绘制UI
-    death_text = pygame.font.SysFont(None, 24).render(f"Death_count: {player.death_count}  Collected_coins: {collected_coins}", True, WHITE)
+    death_text = pygame.font.SysFont("SimHei", 24).render(f"死亡数: {player.death_count}  硬币: {collected_coins}", True, WHITE)
     screen.blit(death_text, (10, 10))
     
     # 新增计时器逻辑
     current_time = pygame.time.get_ticks() - start_ticks
-    timer_text = pygame.font.SysFont(None, 18).render(f"Gaming time: {current_time // 1000}seconds", True, WHITE)
+    timer_text = pygame.font.SysFont("SimHei", 18).render(f"游戏时间: {current_time // 1000}秒", True, WHITE)
     screen.blit(timer_text, (10, 40))  # 在左上角绘制计时器
     
     if game_state == "win":
-        win_text = font.render("恭喜通关! 按 R 重新开始", True, YELLOW)
+        win_text = pygame.font.SysFont("SimHei", 24).render("恭喜通关! 按 R 重新开始", True, YELLOW)
         screen.blit(win_text, (SCREEN_WIDTH//2 - win_text.get_width()//2, SCREEN_HEIGHT//2))
 
     # 绘制操作说明
@@ -551,11 +754,11 @@ while running:
     ]
 
     for i, text in enumerate(controls):
-        ctrl_text = pygame.font.SysFont(None, 24).render(text, True, LIGHT_BLUE)
+        ctrl_text = pygame.font.SysFont("SimHei", 24).render(text, True, LIGHT_BLUE)
         screen.blit(ctrl_text, (SCREEN_WIDTH - ctrl_text.get_width() - 10, 10 + i * 30))
 
     # 新增超链接文本
-    link_text = pygame.font.SysFont(None, 24).render("Directions.txt", True, LIGHT_BLUE)
+    link_text = pygame.font.SysFont("SimHei", 24).render("Directions.txt", True, LIGHT_BLUE)
     link_rect = link_text.get_rect()
     link_rect.topleft = (SCREEN_WIDTH - link_text.get_width() - 10, 10 + (i + 1) * 30)
     screen.blit(link_text, link_rect)

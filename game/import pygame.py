@@ -14,8 +14,8 @@ SCREEN_WIDTH = 1200  # 原来是 800
 SCREEN_HEIGHT = 900  # 原来是 600
 FPS = 60
 GRAVITY = 0.5
-JUMP_STRENGTH = -14
-PLAYER_SPEED = 7  # 稍微提高速度以匹配更大的地图
+JUMP_STRENGTH = -13
+PLAYER_SPEED = 6  # 稍微提高速度以匹配更大的地图
 
 # 颜色定义
 WHITE = (255, 255, 255)
@@ -278,37 +278,58 @@ class MovingSpike(StaticSpike):
     def __init__(self, x, y, width=45, height=30, direction="up"):
         super().__init__(x, y, width, height, direction)
         self.moving_up = False  # 新增标志表示尖刺是否正在向上移动
-        self.speed_y = 0  # 尖刺的垂直速度
-        self.original_y = y  # 记录初始位置
+        self.speed = 0  # 尖刺的速度
+        self.original_y = y 
+        self.original_x = x # 记录初始位置
+        
 
     def update(self):
-        if self.moving_up:
-            self.y += self.speed_y
-            self.speed_y -= 1  # 模拟加速度
-            if self.y + self.height < 0:  # 如果尖刺完全移出屏幕上方，则隐藏它
-                self.moving_up = False
+        if self.direction == "up":
+            self.y -= self.speed
+        elif self.direction == "down":
+            self.y += self.speed
+        elif self.direction == "left":
+            self.x -= self.speed
+        elif self.direction == "right":
+            self.x += self.speed
+
+        # 如果尖刺飞出屏幕，重置
+        if (self.x + self.width < 0 or self.x > SCREEN_WIDTH or
+            self.y + self.height < 0 or self.y > SCREEN_HEIGHT):
+            self.moving_up = False
+            self.speed = 0
 
     def trigger_spike(self, player):
-        # 判断玩家是否在尖刺正上方
-        if (player.x + player.width > self.x and 
-            player.x < self.x + self.width and
-            player.y + player.height <= self.y + 100):  # 玩家底部接触到尖刺顶部
-            self.moving_up = True
-            self.speed_y = -15  # 设置一个较大的初始速度
+        # 根据朝向判断玩家是否在尖刺的前方
+        if self.direction == "up" and self.y-200 <= player.y + player.height <= self.y and player.x + player.width > self.x and player.x < self.x + self.width:
+            self.speed = 7
+            
+        elif self.direction == "down" and self.y + self.height + 200>= player.y >= self.y + self.height and player.x + player.width > self.x and player.x < self.x + self.width:
+            self.speed = 7
+            
+        elif self.direction == "left" and self.x-200 <= player.x + player.width <= self.x and player.y + player.height > self.y and player.y < self.y + self.height:
+            self.speed = 7
+            
+        elif self.direction == "right" and self.x+200 >=player.x >= self.x + self.width and player.y + player.height > self.y and player.y < self.y + self.height:
+            self.speed = 7
+            
+
 
     def reset(self):
         # 重置动态尖刺状态
+        self.x = self.original_x
         self.y = self.original_y
-        self.moving_up = False
-        self.speed_y = 0
+        self.speed = 0
+
+
 
 # 存档点类
 class Checkpoint:
     def __init__(self, x, y):
         self.x = x
         self.y = y
-        self.width = 20
-        self.height = 20
+        self.width = 30
+        self.height = 30
         self.activated = False
 
     def activate(self, player):
@@ -329,9 +350,9 @@ class Checkpoint:
 
         # 绘制存档点标志
         if self.activated:
-            pygame.draw.circle(screen, GREEN, (self.x + self.width//2, self.y + self.height//2), 5)
+            pygame.draw.circle(screen, GREEN, (self.x + self.width//2, self.y + self.height//2), 7)
         else:
-            pygame.draw.circle(screen, WHITE, (self.x + self.width//2, self.y + self.height//2), 5)
+            pygame.draw.circle(screen, WHITE, (self.x + self.width//2, self.y + self.height//2), 7)
 
 # 在 Spike 类之后添加金币类
 class Coin:
@@ -397,7 +418,6 @@ def create_level():
         Platform(375, 600, 150, 30),
         Platform(600, 525, 150, 30),
         Platform(825, 450, 150, 30),
-        Platform(975, 375, 150, 30),
         Platform(300, 375, 120, 30),
         Platform(150, 300, 120, 30),
         Platform(450, 225, 120, 30),
@@ -406,21 +426,21 @@ def create_level():
 
     spikes = [
         # 地面上的尖刺
-        MovingSpike(450, 800, 45, 30, "up"),
-        MovingSpike(495, 800, 45, 30, "up"),
-        MovingSpike(540, 800, 45, 30, "up"),
-        MovingSpike(735, 800, 45, 30, "up"),
-        MovingSpike(780, 800, 45, 30, "up"),
-        MovingSpike(825, 800, 45, 30, "up"),
+        #MovingSpike(450, 800, 45, 30, "up"),
+        #MovingSpike(495, 800, 45, 30, "up"),
+        #MovingSpike(540, 800, 45, 30, "up"),
+        #MovingSpike(735, 800, 45, 30, "up"),
+        #MovingSpike(780, 800, 45, 30, "up"),
+        #MovingSpike(825, 800, 45, 30, "up"),
 
         # 平台上的尖刺
-        MovingSpike(375, 570, 45, 30, "up"),
-        MovingSpike(600, 495, 45, 30, "up"),
-        MovingSpike(825, 420, 45, 30, "up"),
+        #MovingSpike(375, 570, 45, 30, "up"),
+        #MovingSpike(600, 495, 45, 30, "up"),
+        #MovingSpike(825, 420, 45, 30, "up"),
 
         # 墙上的尖刺
         MovingSpike(1170, 450, 30, 45, "left"),
-        MovingSpike(1170, 495, 30, 45, "left"),
+        #MovingSpike(1170, 495, 30, 45, "left"),
 
         
     ]
@@ -494,10 +514,12 @@ def show_level_selection():
     ground = Platform(0, 825, 1200, 75)
     level_selection_player = Player(50, 500)
     
+    
     while selecting:
         # 使用背景图片而不是纯色填充
         scaled_background = pygame.transform.scale(background_image, (SCREEN_WIDTH, SCREEN_HEIGHT))
         screen.blit(scaled_background, (0, 0))
+        ground.draw(screen)
         
         title_text = pygame.font.SysFont("SimHei", 48).render("选择关卡", True, WHITE)
         screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, 100))
@@ -613,7 +635,7 @@ def create_tutorial_level():
 
     checkpoints = [
         # 新增：在通关路径上添加一个存档点
-        Checkpoint(800, 750)
+        Checkpoint(800, 790)
     ]
     
     # 添加教学用金币
@@ -629,7 +651,7 @@ def create_tutorial_level():
     ]
     
     # 修改为黄色方形区域作为通关目标
-    goal = Platform(1050, 150, 45, 45, YELLOW)  # 使用黄色方形区域表示通关位置
+    goal = Platform(1100, 150, 45, 45, YELLOW)  # 使用黄色方形区域表示通关位置
     
     # 创建教学文本，使用更小的字体并移除箭头指示
     tutorial_texts = [
@@ -656,19 +678,19 @@ if selected_level is None:
 if selected_level == "tutorial":
     # 新手教程关卡
     platforms, spikes, static_spikes, checkpoints, goal, coins, tutorial_texts = create_tutorial_level()
-    player = Player(50, 500)
+    player = Player(50, 600)
     game_state = "playing"
     start_ticks = pygame.time.get_ticks()
 elif selected_level == "level1":
     # 关卡1
     platforms, spikes, static_spikes, checkpoints, goal, coins, bullets = create_level()
-    player = Player(50, 500)
+    player = Player(50, 600)
     game_state = "playing"
     start_ticks = pygame.time.get_ticks()
 else:
     # 默认关卡
     platforms, spikes, static_spikes, checkpoints, goal, coins, bullets = create_level()
-    player = Player(50, 500)
+    player = Player(50, 600)
     game_state = "playing"
     start_ticks = pygame.time.get_ticks()
 
